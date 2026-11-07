@@ -327,7 +327,13 @@ public final class CinemarchyActivity extends Activity implements OmarchyLink.Li
         setContentView(root);
 
         AmbilightController.cinemaDim(this);
-        selectSource(SRC_DHH, false);
+        String startGroup = getIntent() == null ? null : getIntent().getStringExtra(EXTRA_IPTV_GROUP);
+        if (startGroup != null && !startGroup.isEmpty()) {   // TV tile: straight into a live-TV group
+            iptvGroup = startGroup;
+            selectSource(SRC_IPTV, false);
+            // Source buttons select on focus: keep the default focus off "@dhh37" or it switches back.
+            if (SRC_IPTV < sourceButtons.size()) sourceButtons.get(SRC_IPTV).post(() -> sourceButtons.get(SRC_IPTV).requestFocus());
+        } else selectSource(SRC_DHH, false);
         wordmark.reveal();
         if (listContainer.getChildCount() > 0) {
             listContainer.getChildAt(0).requestFocus();
@@ -680,6 +686,10 @@ public final class CinemarchyActivity extends Activity implements OmarchyLink.Li
     // ---- v2.13: Tutorial toggle, Up-Next queue, real :pause, and user IPTV hub -------------------
     private boolean showTutorial = true;
     private String iptvGroup = "ALL";
+    /** Start on the IPTV source with this group selected (the home TV tile uses it). */
+    static final String EXTRA_IPTV_GROUP = "com.omarchytv.home.extra.IPTV_GROUP";
+    /** Above this many channels "ALL" builds too many rows for a TV box: start on a group instead. */
+    private static final int ALL_LIMIT = 3000;
     private volatile List<com.omarchytv.home.iptv.M3uParser.Channel> iptvChannels = new ArrayList<>();
     private volatile boolean iptvLoading;
 
@@ -803,6 +813,11 @@ public final class CinemarchyActivity extends Activity implements OmarchyLink.Li
             com.omarchytv.home.iptv.IptvStore.loadEpg(this, epgUrl, ua);
             iptvChannels = merged;
             iptvLoading = false;
+            List<String> gs = com.omarchytv.home.iptv.M3uParser.groups(merged);
+            if (!gs.isEmpty() && (("ALL".equals(iptvGroup) && merged.size() > ALL_LIMIT)
+                    || (!"ALL".equals(iptvGroup) && !"★ FAV".equals(iptvGroup) && !gs.contains(iptvGroup)))) {
+                iptvGroup = gs.get(0);
+            }
             handler.post(() -> {
                 if (activeSource == SRC_IPTV) selectSource(SRC_IPTV, false);
             });

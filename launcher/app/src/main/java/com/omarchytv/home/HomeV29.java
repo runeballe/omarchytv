@@ -2360,7 +2360,11 @@ final class HomeV29 extends FrameLayout {
             ((TextView) label).setTextColor(focused ? t.fgBright : t.fg);
         }
         float sc = focused ? 1.05f : 1f;
-        f.setZ(focused ? 2f : 0f);
+        f.setZ(focused ? px(16) : 0f);
+        if (android.os.Build.VERSION.SDK_INT >= 28 && t != null) {   // outer glow: shadow in the focus colour
+            f.setOutlineAmbientShadowColor(t.focusBright());
+            f.setOutlineSpotShadowColor(t.focusBright());
+        }
         if (animate) f.animate().scaleX(sc).scaleY(sc).setDuration(110).start();
         else {
             f.setScaleX(sc);
@@ -2368,10 +2372,12 @@ final class HomeV29 extends FrameLayout {
         }
     }
 
-    /** Tile border: unfocused 2 px muted; focused 2 px dark outer outline + 4 px accent inside it. */
+    /** Tile border: unfocused 2 px muted; focused 2 px dark outline + 7 px bright focus colour + inner glow. */
     private final class FocusRing extends Drawable {
         private final Paint p = new Paint();
         private boolean on;
+        /** Inner glow alpha per 3 px band. */
+        private final float[] GLOW = {0.55f, 0.34f, 0.20f, 0.10f, 0.04f};
 
         FocusRing() {
             p.setStyle(Paint.Style.STROKE);
@@ -2395,12 +2401,22 @@ final class HomeV29 extends FrameLayout {
                 c.drawRect(b.left + w / 2, b.top + w / 2, b.right - w / 2, b.bottom - w / 2, p);
                 return;
             }
-            float o = px(2), a = px(4);
+            // Focused: 2 px dark outline, 7 px bright ring in the theme's focus colour, then an inner glow that
+            // fades toward the middle, so the selection reads from the sofa on any banner and any theme.
+            int fc = liveAccent ? Theme.lighten(accent(), 0.45f) : t.focusBright();   // live wallpaper accent wins
+            float o = px(2), a = px(7), band = px(3), in = o + a;
+            for (float al : GLOW) {
+                p.setStrokeWidth(band);
+                p.setColor(Theme.withAlpha(fc, al));
+                float h = in + band / 2;
+                c.drawRect(b.left + h, b.top + h, b.right - h, b.bottom - h, p);
+                in += band;
+            }
             p.setStrokeWidth(o);
             p.setColor(0xE6000000);
             c.drawRect(b.left + o / 2, b.top + o / 2, b.right - o / 2, b.bottom - o / 2, p);
             p.setStrokeWidth(a);
-            p.setColor(accent());
+            p.setColor(fc);
             c.drawRect(b.left + o + a / 2, b.top + o + a / 2, b.right - o - a / 2, b.bottom - o - a / 2, p);
         }
 

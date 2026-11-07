@@ -280,13 +280,48 @@ final class Theme {
     }
 
     /**
-     * Omarchy shell [controls] / [menu] selected row (default/themed/shell.toml.tpl): idle transparent; focused =
-     * fill foreground at 0.08, 1px border foreground at 0.25 (TV: 1dp). Square (Hyprland rounding 0).
+     * Focus colour: the Hyprland active border, or the accent when that one barely differs from the background
+     * (some themes ship a grey active border, which is unreadable as a TV focus cue at 3 m).
+     */
+    int focusColor() {
+        return contrast(activeBorder, bg) >= contrast(accent, bg) || contrast(activeBorder, bg) >= 3f ? activeBorder : accent;
+    }
+
+    /** {@link #focusColor()} pushed 45 % toward white: a bright ring that still carries the theme's hue. */
+    int focusBright() {
+        return lighten(focusColor(), 0.45f);
+    }
+
+    /** Colour {@code c} moved fraction {@code f} toward white. */
+    static int lighten(int c, float f) {
+        int r = (c >> 16) & 0xFF, g = (c >> 8) & 0xFF, b = c & 0xFF;
+        r += Math.round((255 - r) * f);
+        g += Math.round((255 - g) * f);
+        b += Math.round((255 - b) * f);
+        return 0xFF000000 | (r << 16) | (g << 8) | b;
+    }
+
+    /** WCAG contrast ratio of two opaque colours. */
+    static float contrast(int a, int b) {
+        float la = luminance(a), lb = luminance(b);
+        return (Math.max(la, lb) + 0.05f) / (Math.min(la, lb) + 0.05f);
+    }
+
+    private static float luminance(int c) {
+        float[] v = {((c >> 16) & 0xFF) / 255f, ((c >> 8) & 0xFF) / 255f, (c & 0xFF) / 255f};
+        for (int i = 0; i < 3; i++) v[i] = v[i] <= 0.03928f ? v[i] / 12.92f : (float) Math.pow((v[i] + 0.055) / 1.055, 2.4);
+        return 0.2126f * v[0] + 0.7152f * v[1] + 0.0722f * v[2];
+    }
+
+    /**
+     * Omarchy shell [controls] / [menu] selected row, made readable on a TV: idle transparent; focused = fill in the
+     * focus colour at 0.30 and a 3dp border in the brightened focus colour. Square (Hyprland rounding 0).
      */
     android.graphics.drawable.Drawable control(float density) {
+        int fc = focusBright();
         android.graphics.drawable.GradientDrawable on = new android.graphics.drawable.GradientDrawable();
-        on.setColor(withAlpha(fg, 0.08f));
-        on.setStroke(Math.max(1, Math.round(density)), withAlpha(fg, 0.25f));
+        on.setColor(withAlpha(fc, 0.30f));
+        on.setStroke(Math.max(3, Math.round(3 * density)), fc);
         android.graphics.drawable.StateListDrawable s = new android.graphics.drawable.StateListDrawable();
         s.addState(new int[]{android.R.attr.state_focused}, on);
         s.addState(new int[]{android.R.attr.state_selected}, on.getConstantState().newDrawable().mutate());

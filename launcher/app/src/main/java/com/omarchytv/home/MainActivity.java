@@ -60,6 +60,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, T
     private RecyclerView grid;
     private FrameLayout root;
     private FocusFrameView glass;
+    /** IPTV group the TV tile opens (group-title written by split_m3u.py on the PC). */
+    static final String TV_IPTV_GROUP = "Norske";
     private LinearLayout workspaces;
     private View cursor;
     private int activeWorkspace = -1;
@@ -1055,6 +1057,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, T
         }
         builtWith = cfg;
         resumed = true;
+        bootAutostart();
         // KEYCODE_ASSIST never reaches dispatchKeyEvent: the system starts the Assistant role holder instead. With
         // OmarchyTV holding that role, the mic key lands here: the Grok Bot companion by voice ("voiceKey": "companion",
         // the default) or Walker ("launcher"; pressed again while Walker is open it starts voice search).
@@ -1206,7 +1209,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, T
         // Tile rect in root coordinates, using layout positions (ignores the scale animation).
         Rect r = new Rect(0, 0, card.getWidth(), card.getHeight());
         root.offsetDescendantRectToMyCoords(card, r);
-        float pad = 6f * density;        // matches FocusFrameView's halo inset
+        float pad = FocusFrameView.HALO_DP * density;   // matches FocusFrameView's halo inset
         float w = card.getWidth() * AppAdapter.FOCUS_SCALE + 2 * pad;
         float h = card.getHeight() * AppAdapter.FOCUS_SCALE + 2 * pad;
         float x = r.exactCenterX() - w / 2f;
@@ -1490,6 +1493,25 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, T
         } catch (ActivityNotFoundException | SecurityException e) {
             return false;
         }
+    }
+
+    /**
+     * "bootApp": "<package>" in omarchytv.json: open that app once per boot, the first time home is shown
+     * (after the boot screen). Pressing Home afterwards stays on the launcher. Empty or missing = off.
+     */
+    private void bootAutostart() {
+        String pkg = LauncherConfig.readJson(this).optString("bootApp", "").trim();
+        if (pkg.isEmpty()) return;
+        int boot = android.provider.Settings.Global.getInt(getContentResolver(), android.provider.Settings.Global.BOOT_COUNT, -1);
+        android.content.SharedPreferences sp = getSharedPreferences("boot_app", MODE_PRIVATE);
+        if (boot < 0 || sp.getInt("lastBoot", -1) == boot) return;
+        sp.edit().putInt("lastBoot", boot).apply();
+        PackageManager pm = getPackageManager();
+        Intent i = pm.getLeanbackLaunchIntentForPackage(pkg);
+        if (i == null) i = pm.getLaunchIntentForPackage(pkg);
+        if (i == null) return;
+        final Intent start = i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        handler.postDelayed(() -> tryOpen(start), 2500);
     }
 
     private void open(Intent i) {
@@ -5044,6 +5066,14 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, T
 
     @Override
     public void onTvClick() {
+        // 0. IPTV playlists configured (omarchy-tv iptv add): the TV tile opens the "Norske" live channels.
+        try {
+            if (!com.omarchytv.home.iptv.IptvStore.playlists(LauncherConfig.readJson(this)).isEmpty()) {
+                open(new Intent(this, CinemarchyActivity.class).putExtra(CinemarchyActivity.EXTRA_IPTV_GROUP, TV_IPTV_GROUP));
+                return;
+            }
+        } catch (Throwable ignored) {
+        }
         // 1. Try dedicated OEM / Android TV Live TV app activity first (Sony, Sharp, Philips PlayTV, etc.).
         if (tryOpen(liveTvAppIntent())) return;
         // 2. If the user watches TV via an external digibox/STB on HDMI (e.g. Philips TPM171E in Issue #2),
